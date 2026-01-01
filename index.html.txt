@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Dog Beach Scout</title>
+    <style>
+        :root {
+            --bg-color: #1c1c1e;
+            --card-bg: #2c2c2e;
+            --modal-bg: #151515;
+            --text-primary: #ffffff;
+            --text-secondary: #8e8e93;
+            --accent-green: #30d158;
+            --accent-yellow: #ffd60a;
+            --accent-red: #ff453a;
+            --accent-blue: #0a84ff;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .container { width: 100%; max-width: 400px; }
+
+        /* HEADER */
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 15px;
+        }
+        .header-title { font-size: 16px; font-weight: 800; color: var(--accent-green); }
+        .live-badge { font-size: 10px; background: #333; padding: 2px 6px; border-radius: 4px; color: #888; }
+
+        /* LIST CARDS */
+        .row-card {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            padding: 14px 16px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: transform 0.1s, background-color 0.2s;
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+            opacity: 1 !important; 
+        }
+        .row-card:active { transform: scale(0.98); background-color: #3a3a3c; }
+
+        .left-col { display: flex; align-items: center; width: 80px; flex-shrink: 0; }
+        .day-name { font-family: monospace; font-weight: 700; font-size: 14px; color: var(--text-secondary); width: 35px; }
+        .status-icon { font-size: 16px; margin-left: 8px; }
+
+        .right-col { flex-grow: 1; display: flex; flex-direction: column; align-items: flex-start; margin-left: 10px; }
+        
+        /* Time Row */
+        .time-row { 
+            display: flex; align-items: center; justify-content: space-between; 
+            width: 100%; margin-bottom: 4px; 
+        }
+        .time-window { font-size: 14px; font-weight: 700; color: white; }
+        
+        /* Crowd Text Styles */
+        .crowd-text { font-weight: 700; text-transform: uppercase; margin-left: 4px; }
+        .crowd-empty { color: #888; }
+        .crowd-quiet { color: var(--accent-green); }
+        .crowd-mod   { color: var(--accent-yellow); }
+        .crowd-party { color: var(--accent-red); }
+
+        .stats-row { font-size: 11px; color: var(--accent-green); }
+        
+        .fail-reasons { font-size: 12px; color: var(--accent-red); font-weight: 500; }
+        
+        .tap-hint { color: #555; font-size: 12px; margin-left: auto; }
+
+        /* MODAL */
+        .modal-backdrop {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); backdrop-filter: blur(8px);
+            display: none; justify-content: center; align-items: center;
+            z-index: 1000; opacity: 0; transition: opacity 0.2s;
+        }
+        .modal-content {
+            background: var(--modal-bg); width: 95%; max-width: 500px;
+            border-radius: 16px; padding: 15px;
+            transform: translateY(20px); transition: transform 0.2s;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5); border: 1px solid #333;
+        }
+        .modal-header { display: flex; flex-direction: column; margin-bottom: 10px; }
+        .modal-top-row { display: flex; justify-content: space-between; align-items: center; width: 100%; }
+        .modal-title { font-weight: 800; font-size: 20px; color: white; }
+        .modal-subtitle { font-size: 14px; color: var(--accent-green); font-weight: 600; margin-top: 4px; }
+        .close-btn { background: #333; color: #fff; border: none; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; }
+
+        canvas { width: 100%; height: 400px; background: #222; border-radius: 8px; }
+        .legend { font-size: 10px; color: #666; margin-top: 8px; text-align: center; }
+        
+        .modal-backdrop.show { display: flex; opacity: 1; }
+        .modal-backdrop.show .modal-content { transform: translateY(0); }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="header">
+            <div class="header-title">🐶 Weekly Scout</div>
+            <div class="live-badge" id="statusBadge">Init...</div>
+        </div>
+        <div id="listContainer"></div>
+    </div>
+
+    <div class="modal-backdrop" id="modal" onclick="closeModal(event)">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-top-row">
+                    <div class="modal-title" id="modalTitle">Details</div>
+                    <button class="close-btn" onclick="closeModal(event)">✕</button>
+                </div>
+                <div class="modal-subtitle" id="modalSubtitle"></div>
+            </div>
+            <canvas id="detailChart"></canvas>
+            <div class="legend">
+                <span style="color:#30d158">■ Best Time</span>
+                <span style="color:#64d2ff">■ Okay</span>
+                <span style="color:#ff453a">■ Bad Weather</span>
+            </div>
+        </div>
+    </div>
+
+<script>
+    // --- STATIC DATA ---
+    const CROWD_PATTERNS = {
+        "Sunday":    [0,0,0,0,0,0,5,15,35,55,75,85,90,85,70,60,45,30,15,5,0,0,0,0],
+        "Monday":    [0,0,0,0,0,0,5,10,20,30,40,45,40,35,30,35,40,30,15,5,0,0,0,0],
+        "Tuesday":   [0,0,0,0,0,0,5,10,20,25,35,40,35,30,25,30,35,25,10,5,0,0,0,0],
+        "Wednesday": [0,0,0,0,0,0,5,10,20,25,35,40,35,30,25,30,35,25,10,5,0,0,0,0],
+        "Thursday":  [0,0,0,0,0,0,5,10,20,30,40,45,40,35,30,40,50,40,20,5,0,0,0,0],
+        "Friday":    [0,0,0,0,0,0,5,15,30,45,55,60,65,70,75,80,70,50,30,15,5,0,0,0],
+        "Saturday":  [0,0,0,0,0,0,10,25,45,65,80,95,100,95,85,75,60,40,20,10,5,0,0,0]
+    };
+
+    const CONFIG = {
+        lat: 33.66,
+        lon: -117.99,
+        stationId: "9410580",
+        limits: { maxTemp: 85, minTemp: 55, maxWind: 15, maxRain: 30 }
+    };
+
+    let GLOBAL_WEATHER = null;
+    let GLOBAL_TIDES_HILO = null;
+
+    // --- MAIN ---
+    (async () => {
+        const statusEl = document.getElementById('statusBadge');
+        const container = document.getElementById('listContainer');
+
+        try {
+            statusEl.innerText = "Loading...";
+            
+            const [weather, tides] = await Promise.all([
+                fetchWeather(),
+                fetchTidesHiLo()
+            ]);
+
+            GLOBAL_WEATHER = weather;
+            GLOBAL_TIDES_HILO = tides;
+
+            statusEl.innerText = "Live";
+            
+            // Rolling Window
+            let startOffset = 0;
+            if (weather.daily && weather.daily.sunset) {
+                let todaySunset = new Date(weather.daily.sunset[0]);
+                let hardStop = new Date(todaySunset);
+                hardStop.setHours(hardStop.getHours() + 1); 
+                if (new Date() > hardStop) startOffset = 1; 
+            }
+
+            container.innerHTML = "";
+            for (let i = 0; i < 7; i++) {
+                let targetDate = new Date();
+                targetDate.setDate(targetDate.getDate() + startOffset + i);
+                targetDate.setHours(0,0,0,0);
+
+                let result = analyzeDay(targetDate, weather, tides);
+                container.appendChild(createCard(result, targetDate));
+            }
+
+        } catch (e) {
+            console.error(e);
+            statusEl.innerText = "Error";
+            alert("Failed: " + e.message);
+        }
+    })();
+
+    // --- LOGIC ---
+    function analyzeDay(dateObj, weatherData, tideData) {
+        let dayIndex = -1;
+        const tStr = dateObj.toISOString().split('T')[0];
+        for(let k=0; k<weatherData.daily.time.length; k++) {
+            if(weatherData.daily.time[k] === tStr) { dayIndex = k; break; }
+        }
+
+        if (dayIndex === -1) return { dayName: formatDay(dateObj), isGo: false, reasons: ["No Data"] };
+
+        let sunriseStr = weatherData.daily.sunrise[dayIndex];
+        let sunsetStr = weatherData.daily.sunset[dayIndex];
+        let scheduleStart = new Date(sunriseStr);
+        let scheduleEnd = new Date(sunsetStr);
+        scheduleEnd.setHours(scheduleEnd.getHours() + 1);
+
+        return getDayStats(tideData, weatherData, scheduleStart, scheduleEnd, dateObj);
+    }
+
+    function getDayStats(tides, weatherData, scheduleStart, scheduleEnd, targetDate) {
+        let lowTides = tides.filter(t => {
+            let d = new Date(t.t.replace(" ","T"));
+            return d.getDate() === targetDate.getDate() && t.type === 'L';
+        });
+
+        let validHours = [];
+        let failureReasons = new Set(); 
+        if (lowTides.length === 0) failureReasons.add("🌊 No Tide");
+
+        let dayNameFull = targetDate.toLocaleDateString('en-US', { weekday: 'long' });
+        let dailyCrowdProfile = CROWD_PATTERNS[dayNameFull] || [];
+
+        for (let tide of lowTides) {
+            let tideTime = new Date(tide.t.replace(" ", "T"));
+            let checkStart = new Date(tideTime.getTime() - (2 * 60 * 60 * 1000));
+            let checkEnd = new Date(tideTime.getTime() + (2 * 60 * 60 * 1000));
+
+            if (checkEnd < scheduleStart) { failureReasons.add("🌅 Too Early"); continue; }
+            if (checkStart > scheduleEnd) { failureReasons.add("🌙 Too Late"); continue; }
+
+            let times = weatherData.hourly.time;
+            for (let i = 0; i < times.length; i++) {
+                let ft = new Date(times[i]);
+                if (ft.getDate() !== targetDate.getDate()) continue; 
+
+                if (ft >= checkStart && ft < checkEnd) {
+                    if (ft >= scheduleStart && ft < scheduleEnd) {
+                        let isGood = true;
+                        if (weatherData.hourly.precipitation_probability[i] > CONFIG.limits.maxRain) { failureReasons.add("🌧️ Rain"); isGood = false; }
+                        if (weatherData.hourly.temperature_2m[i] > CONFIG.limits.maxTemp) { failureReasons.add("🥵 Hot"); isGood = false; }
+                        if (weatherData.hourly.temperature_2m[i] < CONFIG.limits.minTemp) { failureReasons.add("❄️ Cold"); isGood = false; }
+                        if (weatherData.hourly.wind_speed_10m[i] > CONFIG.limits.maxWind) { failureReasons.add("💨 Windy"); isGood = false; }
+
+                        if (isGood) {
+                            let hrIndex = ft.getHours();
+                            let crowdVal = dailyCrowdProfile[hrIndex] || 0;
+                            validHours.push({ 
+                                temp: weatherData.hourly.temperature_2m[i], 
+                                wind: weatherData.hourly.wind_speed_10m[i], 
+                                uv: weatherData.hourly.uv_index[i],
+                                crowd: crowdVal,
+                                time: ft 
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        if (validHours.length > 0) {
+            let sumT = 0, sumW = 0, sumUV = 0, sumCrowd = 0;
+            validHours.forEach(h => { 
+                sumT+=h.temp; sumW+=h.wind; sumUV+=h.uv; sumCrowd+=h.crowd; 
+            });
+            validHours.sort((a,b) => a.time - b.time);
+
+            let first = validHours[0].time;
+            let last = validHours[validHours.length - 1].time;
+            let endWalk = new Date(last.getTime() + 60*60*1000);
+            
+            let sStr = first.toLocaleTimeString([], {hour: 'numeric'}).replace(" PM","").replace(" AM","");
+            let eStr = endWalk.toLocaleTimeString([], {hour: 'numeric'}); 
+
+            let avgCrowd = Math.round(sumCrowd / validHours.length);
+            let crowdLabel = "Empty";
+            let crowdClass = "crowd-empty";
+
+            if (avgCrowd > 0) { crowdLabel = "Quiet"; crowdClass = "crowd-quiet"; }
+            if (avgCrowd >= 35) { crowdLabel = "Moderate"; crowdClass = "crowd-mod"; }
+            if (avgCrowd >= 70) { crowdLabel = "Dog Party"; crowdClass = "crowd-party"; }
+            
+            return {
+                dayName: formatDay(targetDate),
+                isGo: true,
+                windowStr: `${sStr}-${eStr}`,
+                goodHoursSet: new Set(validHours.map(h => h.time.getTime())), // For Chart Highlighting
+                avgTemp: Math.round(sumT / validHours.length),
+                avgWind: Math.round(sumW / validHours.length),
+                avgUV: Math.round(sumUV / validHours.length),
+                crowdLabel: crowdLabel,
+                crowdClass: crowdClass,
+                reasons: []
+            };
+        } else {
+            let reasonArr = Array.from(failureReasons);
+            if (reasonArr.length === 0) reasonArr = ["🌙 Too Late"]; 
+            return { dayName: formatDay(targetDate), isGo: false, reasons: reasonArr.slice(0, 3) };
+        }
+    }
+
+    // --- UI HELPERS ---
+    function createCard(data, fullDate) {
+        const div = document.createElement('div');
+        div.className = 'row-card';
+        // Pass entire data object to modal so we have the specific "Good Hours"
+        div.onclick = () => openModal(fullDate, data);
+
+        let rightContent = '';
+        if (data.isGo) {
+            rightContent = `
+                <div class="time-row">
+                    <span class="time-window">${data.windowStr}</span>
+                    <span class="tap-hint">Details &rsaquo;</span>
+                </div>
+                <div class="stats-row">
+                    ${data.avgTemp}° • ${data.avgWind}mph • <span class="crowd-text ${data.crowdClass}">${data.crowdLabel}</span>
+                </div>
+            `;
+        } else {
+            rightContent = `<div class="fail-reasons">${data.reasons.join("  ")}</div>`;
+        }
+
+        div.innerHTML = `
+            <div class="left-col">
+                <div class="day-name">${data.dayName}</div>
+                <div class="status-icon">${data.isGo ? "✅" : "🛑"}</div>
+            </div>
+            <div class="right-col">${rightContent}</div>
+        `;
+        return div;
+    }
+
+    function formatDay(date) {
+        let days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+        let now = new Date();
+        let d1 = new Date(date); d1.setHours(0,0,0,0);
+        let d2 = new Date(now); d2.setHours(0,0,0,0);
+        if (d1.getTime() === d2.getTime()) return "Tdy"; 
+        let d3 = new Date(now); d3.setDate(d3.getDate() + 1); d3.setHours(0,0,0,0);
+        if (d1.getTime() === d3.getTime()) return "Tmw";
+        return days[date.getDay()];
+    }
+
+    // --- POPUP ---
+    async function openModal(dateObj, dayData) {
+        const modal = document.getElementById('modal');
+        const title = document.getElementById('modalTitle');
+        const subtitle = document.getElementById('modalSubtitle');
+        const canvas = document.getElementById('detailChart');
+        const ctx = canvas.getContext('2d');
+        
+        ctx.clearRect(0,0,canvas.width, canvas.height);
+        ctx.fillStyle = "#888"; 
+        ctx.font = "14px sans-serif";
+        ctx.fillText("Fetching hourly data...", 20, 50);
+
+        // TITLE: "🐶 Friday"
+        title.innerText = "🐶 " + dateObj.toLocaleDateString('en-US', { weekday: 'long' });
+        
+        // SUBTITLE: "2 PM - 5 PM" (or just date if no go)
+        if (dayData && dayData.isGo) {
+            subtitle.innerText = dayData.windowStr;
+            subtitle.style.color = "#30d158";
+        } else {
+            subtitle.innerText = dateObj.toLocaleDateString('en-US', { month:'short', day:'numeric'});
+            subtitle.style.color = "#888";
+        }
+
+        modal.classList.add('show');
+
+        try {
+            const hourlyTides = await fetchHourlyTidesForDay(dateObj);
+            // Pass the set of "Good Hours" for green highlighting
+            const goodSet = dayData && dayData.goodHoursSet ? dayData.goodHoursSet : new Set();
+            drawDetailCharts(GLOBAL_WEATHER, hourlyTides, dateObj, goodSet);
+        } catch (e) {
+            alert("Error: " + e.message);
+            closeModal();
+        }
+    }
+
+    function closeModal(e) {
+        if (!e || e.target.classList.contains('modal-backdrop') || e.target.classList.contains('close-btn')) {
+            document.getElementById('modal').classList.remove('show');
+        }
+    }
+
+    function drawDetailCharts(weather, tides, dateObj, goodHoursSet) {
+        const canvas = document.getElementById('detailChart');
+        const ctx = canvas.getContext('2d');
+        
+        const dpr = window.devicePixelRatio || 1;
+        ctx.setTransform(1, 0, 0, 1, 0, 0); 
+        
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+        ctx.scale(dpr, dpr);
+
+        const W = rect.width;
+        const H = rect.height;
+
+        ctx.clearRect(0,0,W,H);
+
+        const tStr = dateObj.toISOString().split('T')[0];
+        let dayIndex = 0;
+        for(let k=0; k<weather.daily.time.length; k++) {
+            if(weather.daily.time[k] === tStr) { dayIndex = k; break; }
+        }
+        
+        const sunrise = new Date(weather.daily.sunrise[dayIndex]);
+        const sunset = new Date(weather.daily.sunset[dayIndex]);
+        const hardStop = new Date(sunset);
+        hardStop.setHours(hardStop.getHours() + 1);
+
+        const startIdx = dayIndex * 24;
+        const endIdx = startIdx + 24;
+        
+        const wTemp = weather.hourly.temperature_2m.slice(startIdx, endIdx);
+        const wWind = weather.hourly.wind_speed_10m.slice(startIdx, endIdx);
+        const wRain = weather.hourly.precipitation_probability.slice(startIdx, endIdx);
+        const wTime = weather.hourly.time.slice(startIdx, endIdx).map(t => new Date(t));
+
+        const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
+        const wCrowd = CROWD_PATTERNS[dayName] || new Array(24).fill(0);
+
+        const tVals = tides.map(t => parseFloat(t.v));
+        const tTimes = tides.map(t => new Date(t.t));
+
+        const charts = [
+            { label: "Tide (ft)", data: tVals, times: tTimes, min: -2, max: 7, y: 10, limit: null },
+            { label: "Wind (mph)", data: wWind, times: wTime, min: 0, max: 20, y: 80, limit: (v)=>v > CONFIG.limits.maxWind },
+            { label: "Temp (°F)", data: wTemp, times: wTime, min: 40, max: 100, y: 150, limit: (v)=>v < CONFIG.limits.minTemp || v > CONFIG.limits.maxTemp },
+            { label: "Rain (%)", data: wRain, times: wTime, min: 0, max: 100, y: 220, limit: (v)=>v > CONFIG.limits.maxRain },
+            { label: "Crowd (%)", data: wCrowd, times: wTime, min: 0, max: 100, y: 290, limit: null } 
+        ];
+
+        const barW = (W - 60) / 24 - 4;
+        const chartH = 50; 
+
+        charts.forEach(c => {
+            ctx.fillStyle = "white";
+            ctx.font = "bold 11px -apple-system";
+            ctx.textAlign = "left";
+            ctx.fillText(c.label, 10, c.y + chartH/2 + 4);
+
+            for(let i=0; i<24; i++) {
+                if (i >= c.data.length) continue;
+
+                let val = c.data[i] || 0;
+                let time = c.times[i];
+                
+                // Color Logic
+                let isDay = time >= sunrise && time <= hardStop;
+                let isBad = c.limit ? c.limit(val) : false;
+                
+                // Check if this specific hour is in the "Green Zone" (Perfect Time)
+                // We use the Set passed from analyzeDay for O(1) lookup
+                // We check if the timestamp (rounded to hour) is in the set
+                let isBestTime = false;
+                if (goodHoursSet.size > 0) {
+                     // Need to match timestamps. The 'time' var here comes from wTime or tTimes.
+                     // best to just check hour + day match or use getTime()
+                     // wTime are Date objects.
+                     isBestTime = goodHoursSet.has(time.getTime());
+                }
+
+                if (!isDay) ctx.fillStyle = "#333"; 
+                else if (isBad) ctx.fillStyle = "#ff453a"; // Limit exceeded
+                else if (c.label.includes("Crowd")) ctx.fillStyle = "#64d2ff"; // Crowd always blue
+                else if (isBestTime) ctx.fillStyle = "#30d158"; // BEST TIME = GREEN
+                else ctx.fillStyle = "#64d2ff"; // Good but not optimal? (Fallback)
+
+                let pct = (val - c.min) / (c.max - c.min);
+                pct = Math.max(0, Math.min(1, pct));
+                let barH = Math.max(4, pct * chartH);
+
+                let x = 70 + (i * (barW + 4));
+                let y = (c.y + chartH) - barH;
+                
+                ctx.fillRect(x, y, barW, barH);
+
+                // DOG EMOJI 🐶 on Top of Best Times
+                if (isBestTime && isDay && !c.label.includes("Crowd")) {
+                    ctx.font = "10px sans-serif";
+                    ctx.textAlign = "center";
+                    ctx.fillText("🐶", x + barW/2, y - 14); // Floating above
+                }
+
+                // Value Labels (On all bars now)
+                if (isDay) {
+                   ctx.fillStyle = "#fff";
+                   ctx.font = "9px sans-serif";
+                   ctx.textAlign = "center";
+                   let txt = c.label.includes("Tide") ? val.toFixed(1) : Math.round(val);
+                   // Don't draw 0 for rain/crowd to keep clean
+                   if(val > 0 || c.label.includes("Temp") || c.label.includes("Tide")) {
+                       ctx.fillText(txt, x + barW/2, y - 3);
+                   }
+                }
+
+                if (i%4===0) {
+                    ctx.fillStyle = "#666";
+                    ctx.font = "10px sans-serif";
+                    ctx.textAlign = "left";
+                    let h = time.getHours();
+                    let ampm = h >= 12 ? 'p' : 'a';
+                    h = h % 12 || 12;
+                    ctx.fillText(h+ampm, x, 360); 
+                }
+            }
+        });
+    }
+
+    async function fetchWeather() {
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${CONFIG.lat}&longitude=${CONFIG.lon}&hourly=temperature_2m,precipitation_probability,wind_speed_10m,uv_index&daily=sunrise,sunset&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto&forecast_days=8`;
+        const res = await fetch(url);
+        return await res.json();
+    }
+
+    async function fetchTidesHiLo() {
+        let dateStr = new Date().toISOString().split('T')[0].replace(/-/g, ''); 
+        let targetUrl = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?begin_date=${dateStr}&range=192&station=${CONFIG.stationId}&product=predictions&datum=MLLW&time_zone=lst_ldt&interval=hilo&units=english&application=DataAPI_Sample&format=json`;
+        const res = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`);
+        const json = await res.json();
+        return json.predictions;
+    }
+
+    async function fetchHourlyTidesForDay(dateObj) {
+        const dStr = dateObj.toISOString().split('T')[0].replace(/-/g, '');
+        const targetUrl = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?begin_date=${dStr}&range=24&station=${CONFIG.stationId}&product=predictions&datum=MLLW&time_zone=lst_ldt&interval=h&units=english&application=DataAPI_Sample&format=json`;
+        const res = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`);
+        const json = await res.json();
+        return json.predictions;
+    }
+</script>
+</body>
+</html>
