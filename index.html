@@ -1,9 +1,10 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Dog Beach Scout</title>
+    <title>Huntington Dog Beach Scout</title>
     <style>
         :root {
             --bg-color: #1c1c1e;
@@ -70,13 +71,13 @@
         .time-window { font-size: 14px; font-weight: 700; color: white; }
         
         /* Crowd Text Styles */
-        .crowd-text { font-weight: 700; text-transform: uppercase; margin-left: 4px; }
+        .crowd-text { font-weight: 700; text-transform: uppercase; margin-left: 4px; font-size: 11px; }
         .crowd-empty { color: #888; }
         .crowd-quiet { color: var(--accent-green); }
         .crowd-mod   { color: var(--accent-yellow); }
         .crowd-party { color: var(--accent-red); }
 
-        .stats-row { font-size: 11px; color: var(--accent-green); }
+        .stats-row { font-size: 11px; color: var(--accent-green); display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
         
         .fail-reasons { font-size: 12px; color: var(--accent-red); font-weight: 500; }
         
@@ -112,7 +113,7 @@
 
     <div class="container">
         <div class="header">
-            <div class="header-title">🐶 Weekly Scout</div>
+            <div class="header-title">🐶 Huntington Dog Beach Scout</div>
             <div class="live-badge" id="statusBadge">Init...</div>
         </div>
         <div id="listContainer"></div>
@@ -286,18 +287,19 @@
             let eStr = endWalk.toLocaleTimeString([], {hour: 'numeric'}); 
 
             let avgCrowd = Math.round(sumCrowd / validHours.length);
+            
+            // CROWD TEXT & ICONS
             let crowdLabel = "Empty";
             let crowdClass = "crowd-empty";
-
-            if (avgCrowd > 0) { crowdLabel = "Quiet"; crowdClass = "crowd-quiet"; }
-            if (avgCrowd >= 35) { crowdLabel = "Moderate"; crowdClass = "crowd-mod"; }
-            if (avgCrowd >= 70) { crowdLabel = "Dog Party"; crowdClass = "crowd-party"; }
+            if (avgCrowd > 0) { crowdLabel = "✌️ Quiet"; crowdClass = "crowd-quiet"; }
+            if (avgCrowd >= 35) { crowdLabel = "⚖️ Moderate"; crowdClass = "crowd-mod"; }
+            if (avgCrowd >= 70) { crowdLabel = "🎈 Dog Party"; crowdClass = "crowd-party"; }
             
             return {
                 dayName: formatDay(targetDate),
                 isGo: true,
                 windowStr: `${sStr}-${eStr}`,
-                goodHoursSet: new Set(validHours.map(h => h.time.getTime())), // For Chart Highlighting
+                goodHoursSet: new Set(validHours.map(h => h.time.getTime())), 
                 avgTemp: Math.round(sumT / validHours.length),
                 avgWind: Math.round(sumW / validHours.length),
                 avgUV: Math.round(sumUV / validHours.length),
@@ -316,7 +318,6 @@
     function createCard(data, fullDate) {
         const div = document.createElement('div');
         div.className = 'row-card';
-        // Pass entire data object to modal so we have the specific "Good Hours"
         div.onclick = () => openModal(fullDate, data);
 
         let rightContent = '';
@@ -327,7 +328,7 @@
                     <span class="tap-hint">Details &rsaquo;</span>
                 </div>
                 <div class="stats-row">
-                    ${data.avgTemp}° • ${data.avgWind}mph • <span class="crowd-text ${data.crowdClass}">${data.crowdLabel}</span>
+                    🌡️${data.avgTemp}° • 💨${data.avgWind}mph • ☀️UV${data.avgUV} • <span class="crowd-text ${data.crowdClass}">${data.crowdLabel}</span>
                 </div>
             `;
         } else {
@@ -368,10 +369,8 @@
         ctx.font = "14px sans-serif";
         ctx.fillText("Fetching hourly data...", 20, 50);
 
-        // TITLE: "🐶 Friday"
         title.innerText = "🐶 " + dateObj.toLocaleDateString('en-US', { weekday: 'long' });
         
-        // SUBTITLE: "2 PM - 5 PM" (or just date if no go)
         if (dayData && dayData.isGo) {
             subtitle.innerText = dayData.windowStr;
             subtitle.style.color = "#30d158";
@@ -384,7 +383,6 @@
 
         try {
             const hourlyTides = await fetchHourlyTidesForDay(dateObj);
-            // Pass the set of "Good Hours" for green highlighting
             const goodSet = dayData && dayData.goodHoursSet ? dayData.goodHoursSet : new Set();
             drawDetailCharts(GLOBAL_WEATHER, hourlyTides, dateObj, goodSet);
         } catch (e) {
@@ -464,26 +462,19 @@
                 let val = c.data[i] || 0;
                 let time = c.times[i];
                 
-                // Color Logic
                 let isDay = time >= sunrise && time <= hardStop;
                 let isBad = c.limit ? c.limit(val) : false;
                 
-                // Check if this specific hour is in the "Green Zone" (Perfect Time)
-                // We use the Set passed from analyzeDay for O(1) lookup
-                // We check if the timestamp (rounded to hour) is in the set
                 let isBestTime = false;
                 if (goodHoursSet.size > 0) {
-                     // Need to match timestamps. The 'time' var here comes from wTime or tTimes.
-                     // best to just check hour + day match or use getTime()
-                     // wTime are Date objects.
                      isBestTime = goodHoursSet.has(time.getTime());
                 }
 
                 if (!isDay) ctx.fillStyle = "#333"; 
-                else if (isBad) ctx.fillStyle = "#ff453a"; // Limit exceeded
+                else if (isBad) ctx.fillStyle = "#ff453a"; 
                 else if (c.label.includes("Crowd")) ctx.fillStyle = "#64d2ff"; // Crowd always blue
                 else if (isBestTime) ctx.fillStyle = "#30d158"; // BEST TIME = GREEN
-                else ctx.fillStyle = "#64d2ff"; // Good but not optimal? (Fallback)
+                else ctx.fillStyle = "#64d2ff"; 
 
                 let pct = (val - c.min) / (c.max - c.min);
                 pct = Math.max(0, Math.min(1, pct));
@@ -498,16 +489,14 @@
                 if (isBestTime && isDay && !c.label.includes("Crowd")) {
                     ctx.font = "10px sans-serif";
                     ctx.textAlign = "center";
-                    ctx.fillText("🐶", x + barW/2, y - 14); // Floating above
+                    ctx.fillText("🐶", x + barW/2, y - 14);
                 }
 
-                // Value Labels (On all bars now)
                 if (isDay) {
                    ctx.fillStyle = "#fff";
                    ctx.font = "9px sans-serif";
                    ctx.textAlign = "center";
                    let txt = c.label.includes("Tide") ? val.toFixed(1) : Math.round(val);
-                   // Don't draw 0 for rain/crowd to keep clean
                    if(val > 0 || c.label.includes("Temp") || c.label.includes("Tide")) {
                        ctx.fillText(txt, x + barW/2, y - 3);
                    }
