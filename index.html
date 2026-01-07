@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -523,16 +522,18 @@
 
     async function fetchTidesHiLo() {
         let dateStr = new Date().toISOString().split('T')[0].replace(/-/g, ''); 
+        // CHANGED: Switched to corsproxy.io for better reliability
         let targetUrl = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?begin_date=${dateStr}&range=192&station=${CONFIG.stationId}&product=predictions&datum=MLLW&time_zone=lst_ldt&interval=hilo&units=english&application=DataAPI_Sample&format=json`;
-        const res = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`);
+        const res = await fetch(`https://corsproxy.io/?` + encodeURIComponent(targetUrl));
         const json = await res.json();
         return json.predictions;
     }
 
     async function fetchHourlyTidesForDay(dateObj) {
         const dStr = dateObj.toISOString().split('T')[0].replace(/-/g, '');
+        // CHANGED: Switched to corsproxy.io for better reliability
         const targetUrl = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?begin_date=${dStr}&range=24&station=${CONFIG.stationId}&product=predictions&datum=MLLW&time_zone=lst_ldt&interval=h&units=english&application=DataAPI_Sample&format=json`;
-        const res = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`);
+        const res = await fetch(`https://corsproxy.io/?` + encodeURIComponent(targetUrl));
         const json = await res.json();
         return json.predictions;
     }
